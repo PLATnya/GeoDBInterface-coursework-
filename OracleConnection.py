@@ -47,14 +47,18 @@ class DBUI:
         self.info_frame = Frame(self.win)
         self.info_frame.grid(column = 1, row = 1)
         self.info_labels = []
-        
         for i in range(3):
             for j in range(2):
-                label = Label(self.info_frame)
                 
+                
+                self.info_labels.append(Label(self.info_frame))
+                self.info_labels[-1].grid(column = i, row = j)
+                self.info_labels[-1].bind("<Button-1>", partial(self.GetForUpdate, label = self.info_labels[-1]))
+                '''
+                label = Label(self.info_frame, name = str(i*2 + j))
                 label.grid(column = i, row = j)
-                label.bind("<Button-1>", lambda: GetForUpdate(label))
-                self.info_labels.append(label)
+                
+                self.info_labels.append(label)'''
         #self.infoLabel = Label(self.win, text = 'fuck')
         #self.infoLabel.bind("<Button-1>", lambda e:print('sdff'))
         #self.infoLabel.grid(column = 1, row = 1)
@@ -67,10 +71,27 @@ class DBUI:
         
     
     def OnSelect(self,event):
-        print(event)
-    def GetForUpdate(self, label: Label):
+        self.cursor = self.connection.cursor()
+        try:
+            command = "select * from {0} where {1} = '{2}'".format(self.active_table.upper(), self.view_name, self.list.get(self.list.curselection()))
+            element_info = np.array(self.cursor.execute(command).fetchone())
+            column_names = np.array(self.cursor.execute('select column_name from ALL_TAB_COLUMNS where TABLE_NAME = %s' % ("'"+self.active_table.upper()+"'")).fetchall())
+            column_names = column_names[::-1]
+            for i in range(element_info.shape[0]):
+                self.info_labels[i].config(text = str(column_names[i]) + ": " + str(element_info[i]))
+        except Exception as e:
+            print(e)
+        self.cursor.close()
+    def GetForUpdate(self, event, label):
+        
+        
+        print(label["text"])
         if not label.cget("text") == '':
+            if self.updating_label!=None:
+               self.updating_label.config(bg="white")
             self.updating_label = label
+            self.updating_label.config(bg="green")
+
     def SetMenu(self, tables, view_name, view_ids):
         self.tablesmenu = Menu(self.mainmenu, tearoff=0)
         
@@ -122,6 +143,9 @@ class DBUI:
         self.active_table = table 
         self.view_id = view_id
         self.view_name = view_name
+        
+        
+        
         
         names = np.array(self.cursor.execute('select {0} from {1}'.format(view_name, table)).fetchall())
         

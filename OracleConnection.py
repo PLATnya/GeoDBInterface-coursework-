@@ -32,6 +32,7 @@ class DBUI:
         self.removeBut.grid(column = 2, row = 0)
         
         
+       
         
         add_action = partial(self.Add,self.elementEnter.get())
         
@@ -45,7 +46,15 @@ class DBUI:
         
         
         self.info_frame = Frame(self.win)
-        self.info_frame.grid(column = 1, row = 1)
+        
+        
+        
+        self.updatingEntry = Entry(self.info_frame, width = 10)
+        self.updatingEntry.bind("<Return>",self.OnSubmitUpdate)
+        
+        self.buffAtribute = ''
+        self.buffElement = ''
+    
         self.info_labels = []
         for i in range(3):
             for j in range(2):
@@ -69,29 +78,79 @@ class DBUI:
         self.mainmenu = Menu(self.win) 
         self.win.config(menu=self.mainmenu)
         
-    
-    def OnSelect(self,event):
+    def OnSubmitUpdate(self,event):
         self.cursor = self.connection.cursor()
         try:
+            value = self.updatingEntry.get()
+
+            command = 'update {0} set {1} = {2} where {3} = {4}'.format(self.active_table.upper(), self.buffAtribute.upper(), value, self.view_name.upper(), "'"+self.buffElement+"'")
+            print(command)
+            self.cursor.execute(command)
+            
+        except Exception as e:
+            print(e)
+            grid_info = self.updatingEntry.grid_info()
+            self.updatingEntry.delete(0, END)
+            self.updatingEntry.grid_forget()
+            self.updating_label.grid(column = grid_info['column'], row = grid_info['row'])
+            self.updating_label = None
+        else:
+            print('ok')
+            grid_info = self.updatingEntry.grid_info()
+            self.updating_label['text'] = self.buffAtribute + ': ' + self.updatingEntry.get()
+            self.updatingEntry.grid_forget()
+            self.updating_label.grid(column = grid_info['column'], row = grid_info['row'])
+            self.updating_label = None
+            self.updatingEntry.delete(0, END)
+        
+        self.cursor.close()
+        
+    def OnSelect(self,event):
+        self.cursor = self.connection.cursor()
+        if self.updating_label!=None:
+            grid_info = self.updatingEntry.grid_info()
+            self.updatingEntry.delete(0,END)
+            self.updatingEntry.grid_forget()
+            self.updating_label.grid(column = grid_info['column'], row = grid_info['row'])
+            self.updating_label = None
+        try:
             command = "select * from {0} where {1} = '{2}'".format(self.active_table.upper(), self.view_name, self.list.get(self.list.curselection()))
+            self.buffElement = self.list.get(self.list.curselection())
             element_info = np.array(self.cursor.execute(command).fetchone())
             column_names = np.array(self.cursor.execute('select column_name from ALL_TAB_COLUMNS where TABLE_NAME = %s' % ("'"+self.active_table.upper()+"'")).fetchall())
             column_names = column_names[::-1]
             for i in range(element_info.shape[0]):
-                self.info_labels[i].config(text = str(column_names[i]) + ": " + str(element_info[i]))
+                self.info_labels[i].config(text = str(column_names[i][0]) + ": " + str(element_info[i]))
+            self.info_frame.grid(column = 1, row = 1)
+            
         except Exception as e:
             print(e)
         self.cursor.close()
-    def GetForUpdate(self, event, label):
-        
+    def GetForUpdate(self, event, label: Label):
         
         print(label["text"])
         if not label.cget("text") == '':
             if self.updating_label!=None:
-               self.updating_label.config(bg="white")
+                grid_info = self.updatingEntry.grid_info()
+                self.updatingEntry.grid_forget()
+                self.updating_label.grid(column = grid_info['column'], row = grid_info['row'])
+                self.updating_label.config(text = self.buffAtribute + ': ' + self.updatingEntry.get())    
+                #self.updating_label.config(bg='#F0F0F0')
             self.updating_label = label
-            self.updating_label.config(bg="green")
-
+            
+            grid_info = self.updating_label.grid_info()
+            self.updating_label.grid_forget()
+            self.updatingEntry.grid(column = grid_info['column'], row = grid_info['row'])
+            self.updatingEntry.delete(0,END)
+            
+            attribute, value = tuple(self.updating_label['text'].split(': '))
+            self.buffAtribute = attribute
+            self.updatingEntry.insert(0,value)
+            
+            
+            #self.updating_label.config(bg="green")
+            #grid_info = self.updating_label.grid_info()
+            #TODO: при нажатии вместо надписи появляется место ввода, где записано текущее значение, после нажатия enter все меняется
     def SetMenu(self, tables, view_name, view_ids):
         self.tablesmenu = Menu(self.mainmenu, tearoff=0)
         
@@ -143,16 +202,24 @@ class DBUI:
         self.active_table = table 
         self.view_id = view_id
         self.view_name = view_name
+        self.info_frame.grid_forget()
+        self.buffElement = ""
+        if self.updating_label!=None:
+            grid_info = self.updatingEntry.grid_info()
+            self.updatingEntry.delete(0,END)
+            self.updatingEntry.grid_forget()
+            self.updating_label.grid(column = grid_info['column'], row = grid_info['row'])
+            self.updating_label = None
         
-        
-        
+        for i in self.info_labels:
+            i['text'] = ''
         
         names = np.array(self.cursor.execute('select {0} from {1}'.format(view_name, table)).fetchall())
         
         self.list.delete(0, self.list.size())
        # self.infoLabel.config(text = '')
         for i in names:
-            self.list.insert(self.list.size(), i)
+            self.list.insert(self.list.size(), i[0])
         self.cursor.close()
             
         
@@ -201,6 +268,9 @@ class DBUI:
         try:
             index = self.list.index(self.list.curselection())
             self.cursor.execute('delete from {0} where {1} = {2}'.format(table, view_id, index))
+            self.info_frame.grid_forget()
+            self.buffElement = ""
+            self.updating_label = None
         except Exception as e:
             print('cant delete')
             print(e)
@@ -210,9 +280,9 @@ class DBUI:
     
 if __name__ == "__main__":
     
-    view_name = ['object_name', 'country_name', 'category_name']
-    view_ids = ['object_id', 'country_id', 'category_id']
-    tables = ['Objects', 'Countries', 'Categories']
+    view_name = ['country_name', 'object_name', 'invention_date', 'class_name', 'category_name', 'continent_name', 'creation_type_name', 'coords', 'climate_type', 'weather']
+    view_ids = ['country_id', 'object_id', 'object_id', 'class_id', 'category_id', 'continent_id', 'creation_type_id', 'location_id', 'climate_id', 'weather_id']
+    tables = ['countries', 'objects', 'histories','objectclasses','categories','continents','creationtypes','locations','climates','weathers']
 
     data = DBUI("c##vadim",'vp','ORCL')
     data.SetMenu(tables, view_name, view_ids)   

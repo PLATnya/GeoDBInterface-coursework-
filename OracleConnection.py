@@ -1,4 +1,3 @@
-# несколько страниц
 import cx_Oracle 
 import numpy as np   
 from tkinter import *
@@ -80,6 +79,9 @@ class DBUI:
         
     def OnSubmitUpdate(self,event):
         self.cursor = self.connection.cursor()
+        
+        
+        #TODO: если изменяемый параметр это отображаемый параметр то меняется и отображение
         try:
             value = self.updatingEntry.get()
 
@@ -117,14 +119,22 @@ class DBUI:
             command = "select * from {0} where {1} = '{2}'".format(self.active_table.upper(), self.view_name, self.list.get(self.list.curselection()))
             self.buffElement = self.list.get(self.list.curselection())
             element_info = np.array(self.cursor.execute(command).fetchone())
-            column_names = np.array(self.cursor.execute('select column_name from ALL_TAB_COLUMNS where TABLE_NAME = %s' % ("'"+self.active_table.upper()+"'")).fetchall())
-            column_names = column_names[::-1]
-            for i in range(element_info.shape[0]):
-                self.info_labels[i].config(text = str(column_names[i][0]) + ": " + str(element_info[i]))
+            data = np.array(self.cursor.execute('select column_name,column_id from ALL_TAB_COLUMNS where TABLE_NAME = %s' % ("'"+self.active_table.upper()+"'")).fetchall())
+            column_names = data[:,0]
+            column_ids= data[:,1].astype(int) - 1
+            if element_info.shape != column_names.shape:
+                element_info = np.array([None]*column_names.shape[0])
+            print(element_info.shape, column_names.shape, column_ids.shape)
+        
+            # берем не подрят а по айдишнику
+            #column_names = column_names[::-1]
+            #for i in range(element_info.shape[0]):
+            for n,i in enumerate(column_ids):
+                self.info_labels[i].config(text = str(column_names[n]) + ": " + str(element_info[i]))
             self.info_frame.grid(column = 1, row = 1)
             
         except Exception as e:
-            print(e)
+            print(e, ' On Select')
         self.cursor.close()
     def GetForUpdate(self, event, label: Label):
         
@@ -222,25 +232,57 @@ class DBUI:
             self.list.insert(self.list.size(), i[0])
         self.cursor.close()
             
-        
+     
     def Add(self, value):
+        
         table = self.active_table
         self.cursor = self.connection.cursor() 
         try:
-            info_handler = np.array(self.cursor.execute('select column_name, data_type, nullable from ALL_TAB_COLUMNS where TABLE_NAME = %s' % ("'"+table.upper()+"'")).fetchall())
+            info_handler = np.array(self.cursor.execute('select column_name, data_type,nullable , column_id from ALL_TAB_COLUMNS where TABLE_NAME = %s' % ("'"+table.upper()+"'")).fetchall())
             column_names = info_handler[:,0]
             data_types = info_handler[:,1]
             nullable = info_handler[:,2]
+            column_ids = info_handler[:,3].astype(int) -1
             
             count = column_names.shape[0]
             index = np.where(column_names == self.view_name.upper())[0][0]
-              
-            values = ()
+            
+            values = np.array([None]*count)
+            
+            #values = ()
+            
             for n,i in enumerate(data_types):    
+                  #TODO: проверка, если ID и елсли он числовой, то тогда берем sequence,
+                  #в других случаях проверка на ноль или стандартное значение
+                  # проверять и для даты
                   
-                if n == index:
+                  
+                #if nullable[n] == 'Y' and column_names[n] != self.view_id.upper():
+                    
+                    #values += (None,)
+                    
+                if nullable[n] == 'N':
+                    if n == index:
+                        values[column_ids[n]] = value
+                        #values += (value,)
+                    elif i == 'NUMBER':
+                        if column_names[n] == self.view_id.upper():
+                            values[column_ids[n]] = self.cursor.execute('select {0}.nextval from dual'.format((table+'_seq').upper())).fetchone()[0]
+                        else:
+                            values[column_ids[n]] = 0
+                            #values += (0,)
+                    elif i == 'VARCHAR' or i == 'VARCHAR2':
+                        values[column_ids[n]] = 'nothing here'
+                        #values += ('nothing here',)
+                    elif i == 'DATE':
+                        date = self.cursor.execute("SELECT TO_CHAR(SYSDATE, 'MM-DD-YYYY') FROM DUAL").fetchone()[0]
+                        values[column_ids[n]] = date
+                        #values += (date,)
+                
+                '''if n == index:
                     values += (value,)
                 elif column_names[n] == self.view_id.upper():
+                    
                     values += self.cursor.execute('select {0}.nextval from dual'.format((table+'_seq').upper())).fetchall()[0]
                 elif nullable[n] == 'Y':
                     values += (None,)
@@ -248,12 +290,13 @@ class DBUI:
                     if i == 'NUMBER':
                         values += (0,)
                     elif i == 'VARCHAR' or i == 'VARCHAR2':
-                        values += ('nothing',)
-    
-                      
-            values = values[::-1]
-            value_str = str(values).replace('None', 'NULL')
-              
+                        values += ('nothing',)'''
+            
+            #if column_ids[0] == '5':
+             #   values = values[::-1]
+            
+            value_str = str(tuple(values)).replace('None', 'NULL')
+            print(values)
             self.cursor.execute('insert into {0} values {1}'.format(table.upper(), value_str))
         except Exception as e:
             print('cant add')
@@ -280,7 +323,7 @@ class DBUI:
     
 if __name__ == "__main__":
     
-    view_name = ['country_name', 'object_name', 'invention_date', 'class_name', 'category_name', 'continent_name', 'creation_type_name', 'coords', 'climate_type', 'weather']
+    view_name = ['country_name', 'object_name', 'object_id', 'class_name', 'category_name', 'continent_name', 'creation_type_name', 'coords', 'climate_type', 'weather']
     view_ids = ['country_id', 'object_id', 'object_id', 'class_id', 'category_id', 'continent_id', 'creation_type_id', 'location_id', 'climate_id', 'weather_id']
     tables = ['countries', 'objects', 'histories','objectclasses','categories','continents','creationtypes','locations','climates','weathers']
 

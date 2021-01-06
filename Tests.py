@@ -13,17 +13,18 @@ class TestCalculator(unittest.TestCase):
         self.cursor = self.connection.cursor()
         '''data = DBUI("c##vadim",'vp','ORCL')
         data.SetMenu(tables, view_name, view_ids)'''
-    @unittest.skip('no reason')
+   # @unittest.skip('no reason')
     def test_rollback(self):
         
         
+        colun = np.array(self.cursor.execute("select column_name,column_id from ALL_TAB_COLUMNS where TABLE_NAME = 'OBJECTS'").fetchall())
         
-        
-    
+        print(colun[:,1].astype(int))
         self.cursor.close()
         self.connection.rollback()
         self.connection.close()
         self.assertEqual(5, 5)
+    @unittest.skip('no reason')
     def test_commit(self):
         self.cursor.close()
         #self.connection.commit()

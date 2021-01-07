@@ -17,9 +17,13 @@ class TestCalculator(unittest.TestCase):
     def test_rollback(self):
         
         
-        colun = np.array(self.cursor.execute("select column_name,column_id from ALL_TAB_COLUMNS where TABLE_NAME = 'OBJECTS'").fetchall())
+        res = np.array(self.cursor.execute("select column_name, data_type, column_id from ALL_TAB_COLUMNS where TABLE_NAME = 'HISTORIES'").fetchall())
+        indexes = np.argsort(res[:,2].astype(int) - 1)
         
-        print(colun[:,1].astype(int))
+        #values = np.array([res[:,0][i] for i in np.argsort(indexes)])
+        print(res[:,0][indexes])
+        
+        self.cursor.execute("insert into HISTORIES values(to_date('12.04.2002','dd-mm-yyyy'),'sdfsdf',3)")
         self.cursor.close()
         self.connection.rollback()
         self.connection.close()
